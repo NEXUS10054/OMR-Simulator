@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OMR Simulator</title>
+<style>
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #121212;
+    color: #eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h2 {
+    margin-bottom: 10px;
+  }
+  #header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  input, select, button {
+    padding: 5px 10px;
+    margin: 3px;
+    border-radius: 4px;
+    border: none;
+    outline: none;
+    font-size: 14px;
+  }
+  button {
+    cursor: pointer;
+    background: #fff;
+    color: #121212;
+    font-weight: bold;
+  }
+  #setupForm {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 15px;
+  }
+  #setupForm div {
+    display: flex;
+    flex-direction: column;
+    margin: 3px;
+  }
+  label {
+    margin-bottom: 3px;
+    font-size: 14px;
+  }
+  #omrSheet {
+    margin-top: 20px;
+    display: flex;
+    gap: 40px; /* space between columns */
+    flex-wrap: wrap;
+  }
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+  .question-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .bubble {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: transparent;
+  }
+  .bubble.selected {
+    background: #fff;
+  }
+  #timerDisplay {
+    font-size: 18px;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<!-- Include html2canvas -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<div id="header">
+  <h2>OMR Simulator</h2>
+  <div><span id="timerDisplay"></span></div>
+</div>
+
+<div id="setupForm">
+  <div><label>Name:</label><input type="text" id="studentName"></div>
+  <div><label>Roll Number:</label><input type="text" id="rollNo"></div>
+  <div><label>Subject:</label><input type="text" id="subject"></div>
+  <div><label>Topic:</label><input type="text" id="topic"></div>
+  <div><label>Test No.:</label><input type="text" id="testNo"></div>
+  <div><label>No. of Questions:</label><input type="number" id="numQuestions" min="1" value="10"></div>
+  <div><label>Options per Question:</label><input type="number" id="numOptions" min="2" value="4"></div>
+  <div><label>Time (minutes):</label><input type="number" id="testTime" min="1" value="5"></div>
+  <div>
+    <label>Mode:</label>
+    <select id="modeSelect">
+      <option value="timer">Timer</option>
+      <option value="stopwatch">Stopwatch</option>
+    </select>
+  </div>
+  <button onclick="generateOMR()">Generate OMR</button>
+</div>
+
+<div id="omrSheet"></div>
+<div style="margin-top:10px;">
+  <button id="finishBtn" onclick="finishStopwatch()" style="display:none;">Finish</button>
+  <button id="saveBtn" onclick="saveOMR()" style="margin-left:5px; display:none;">Save OMR as JPEG</button>
+</div>
+
+<script>
+let timerInterval;
+let timeRemaining;
+let omrLocked = false;
+let stopwatchTime = 0;
+let stopwatchInterval;
+
+function startTimer(duration) {
+  clearInterval(timerInterval);
+  timeRemaining = duration * 60;
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    timeRemaining--;
+    updateTimerDisplay();
+    if(timeRemaining <= 0){
+      clearInterval(timerInterval);
+      omrLocked = true;
+      alert("Time's up!");
+    }
+  }, 1000);
+}
+
+function startStopwatch() {
+  clearInterval(stopwatchInterval);
+  stopwatchTime = 0;
+  updateTimerDisplay();
+  document.getElementById('finishBtn').style.display = 'inline-block';
+  stopwatchInterval = setInterval(() => {
+    stopwatchTime++;
+    updateTimerDisplay();
+  }, 1000);
+}
+
+function finishStopwatch() {
+  clearInterval(stopwatchInterval);
+  omrLocked = true;
+  document.getElementById('finishBtn').style.display = 'none';
+  alert("Stopwatch stopped. You can now save your OMR.");
+}
+
+function updateTimerDisplay() {
+  const mode = document.getElementById('modeSelect').value;
+  let display = '';
+  if(mode === 'timer'){
+    const mins = Math.floor(timeRemaining / 60).toString().padStart(2,'0');
+    const secs = (timeRemaining % 60).toString().padStart(2,'0');
+    display = `${mins}:${secs}`;
+  } else {
+    const mins = Math.floor(stopwatchTime / 60).toString().padStart(2,'0');
+    const secs = (stopwatchTime % 60).toString().padStart(2,'0');
+    display = `${mins}:${secs}`;
+  }
+  document.getElementById('timerDisplay').textContent = display;
+}
+
+function generateOMR() {
+  const sheet = document.getElementById('omrSheet');
+  sheet.innerHTML = ''; 
+  omrLocked = false;
+  document.getElementById('saveBtn').style.display = 'inline-block';
+  document.getElementById('finishBtn').style.display = 'none';
+
+  const questions = parseInt(document.getElementById('numQuestions').value);
+  const options = parseInt(document.getElementById('numOptions').value);
+  const duration = parseInt(document.getElementById('testTime').value);
+  const mode = document.getElementById('modeSelect').value;
+
+  if(mode==='timer') startTimer(duration);
+  else startStopwatch();
+
+  const colCount = Math.ceil(questions/50);
+  const perColumn = Math.ceil(questions/colCount);
+
+  for(let c=0; c<colCount; c++){
+    const column = document.createElement('div');
+    column.className = 'column';
+    const startQ = c*perColumn+1;
+    const endQ = Math.min(startQ+perColumn-1, questions);
+    for(let i=startQ; i<=endQ; i++){
+      const row = document.createElement('div');
+      row.className = 'question-row';
+      const qLabel = document.createElement('div');
+      qLabel.textContent = i + '.';
+      row.appendChild(qLabel);
+
+      for(let j=0; j<options; j++){
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.dataset.question = i;
+        bubble.dataset.option = j;
+        bubble.addEventListener('click', () => {
+          if(omrLocked) return;
+          const siblings = row.querySelectorAll('.bubble');
+          siblings.forEach(b => b.classList.remove('selected'));
+          bubble.classList.add('selected');
+        });
+        row.appendChild(bubble);
+      }
+      column.appendChild(row);
+    }
+    sheet.appendChild(column);
+  }
+}
+
+function saveOMR() {
+  const captureDiv = document.createElement('div');
+  captureDiv.style.background = '#121212';
+  captureDiv.style.color = '#fff';
+  captureDiv.style.padding = '20px';
+  captureDiv.style.display = 'inline-block';
+
+  const headerClone = document.getElementById('setupForm').cloneNode(true);
+  const omrClone = document.getElementById('omrSheet').cloneNode(true);
+  captureDiv.appendChild(headerClone);
+  captureDiv.appendChild(omrClone);
+  document.body.appendChild(captureDiv);
+
+  html2canvas(captureDiv, {backgroundColor: '#121212', scale:2}).then(canvas => {
+    const link = document.createElement('a');
+    link.download = `${document.getElementById('subject').value || 'OMR'}_Test.jpeg`;
+    link.href = canvas.toDataURL('image/jpeg',1);
+    link.click();
+    document.body.removeChild(captureDiv);
+  });
+}
+</script>
+
+</body>
+</html>
